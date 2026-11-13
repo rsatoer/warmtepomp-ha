@@ -1,0 +1,241 @@
+# Warmtepomp - H3 als tabblad (versie 2026-11-13c)
+# Voor een bestaand dashboard, bijvoorbeeld "instellingen":
+#   potlood > + (nieuw tabblad) > drie puntjes > Bewerken in YAML
+#   > alles vervangen door deze tekst > Opslaan.
+# Nodig: de drie helpers uit H3-helpers.md (compressor, starts, draaitijd)
+# en de vijf helpers uit H5-helpers.md (weekschema en vier temperaturen).
+title: Warmtepomp status
+path: warmtepomp-status
+icon: mdi:heat-pump
+type: sections
+max_columns: 3
+sections:
+  # ---------------------------------------------------------------- Nu
+  - type: grid
+    cards:
+      - type: heading
+        heading: Nu
+        icon: mdi:heat-pump
+      - type: markdown
+        text_only: true
+        content: |
+          {% set comp = is_state('binary_sensor.compressor_warmtepomp', 'on') %}
+          {% set boiler = is_state('binary_sensor.node_5_digital_logging_6', 'on') %}
+          {% set verwarm = is_state('binary_sensor.node_5_digital_logging_5', 'on') %}
+          {% if not comp %}
+          ## Stil
+          {% elif boiler %}
+          ## Boiler laden
+          {% elif verwarm %}
+          ## Verwarmen
+          {% else %}
+          ## Koelen
+          {% endif %}
+          {{ states('sensor.energymeter_warmtepomp_power') | int(0) }} W.
+          Pompen en kleppen van de UVR (via de C.M.I.) lopen tot 12,5 minuut achter.
+      - type: tile
+        entity: binary_sensor.compressor_warmtepomp
+        name: Compressor
+      - type: tile
+        entity: sensor.energymeter_warmtepomp_power
+        name: Verbruik nu
+      - type: tile
+        entity: sensor.starts_warmtepomp_vandaag
+        name: Starts vandaag
+      - type: tile
+        entity: sensor.draaitijd_warmtepomp_vandaag
+        name: Draaitijd vandaag
+      - type: statistic
+        entity: sensor.energymeter_warmtepomp_energy
+        name: Verbruik vandaag
+        period:
+          calendar:
+            period: day
+        stat_type: change
+      - type: tile
+        entity: sensor.stp8_0_3av_40_127_pv_power
+        name: Zonnepanelen
+      - type: tile
+        entity: sensor.p1_meter_power
+        name: Net (P1)
+
+  # -------------------------------------------------------- Woonkamer
+  - type: grid
+    cards:
+      - type: heading
+        heading: Woonkamer
+        icon: mdi:sofa
+      - type: tile
+        entity: number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer
+        name: HA vraagt nu
+      - type: tile
+        entity: number.schuur_ketelruimte_warmtepomp_esp_gemeten_temperatuur_woonkamer
+        name: Gemeten (naar de ESP)
+      - type: tile
+        entity: schedule.warmtepomp_comfort
+        name: Weekschema comfort
+      - type: tile
+        entity: switch.schuur_ketelruimte_warmtepomp_esp_vakantie
+        name: Vakantie
+      - type: tile
+        entity: input_number.woonkamer_comfort
+        name: Comfort
+        grid_options:
+          columns: 12
+        features_position: inline
+        features:
+          - type: numeric-input
+            style: buttons
+      - type: tile
+        entity: input_number.woonkamer_laag
+        name: Laag
+        grid_options:
+          columns: 12
+        features_position: inline
+        features:
+          - type: numeric-input
+            style: buttons
+      - type: tile
+        entity: input_number.woonkamer_toeslag_thuis
+        name: Toeslag als er iemand thuis is
+        grid_options:
+          columns: 12
+        features_position: inline
+        features:
+          - type: numeric-input
+            style: buttons
+      - type: tile
+        entity: input_number.woonkamer_vakantie
+        name: Vakantietemperatuur
+        grid_options:
+          columns: 12
+        features_position: inline
+        features:
+          - type: numeric-input
+            style: buttons
+      - type: tile
+        entity: switch.schuur_ketelruimte_warmtepomp_esp_verwarmen_toegestaan
+        name: Verwarmen toegestaan
+
+  # ------------------------------------------------- Meldingen en ESP
+  - type: grid
+    cards:
+      - type: heading
+        heading: Meldingen en ESP
+        icon: mdi:bell-outline
+      - type: tile
+        entity: sensor.schuur_ketelruimte_warmtepomp_esp_melding
+        name: Melding
+      - type: tile
+        entity: binary_sensor.schuur_ketelruimte_warmtepomp_esp_c_m_i_bereikbaar
+        name: C.M.I.
+      - type: tile
+        entity: binary_sensor.schuur_ketelruimte_warmtepomp_esp_p1_meter_bereikbaar
+        name: P1-meter
+      - type: tile
+        entity: binary_sensor.schuur_ketelruimte_warmtepomp_esp_onderhoud_bezig
+        name: Onderhoud bezig
+      - type: tile
+        entity: input_boolean.warmtepomp_testfase
+        name: Testfase meldingen
+      - type: tile
+        entity: sensor.schuur_ketelruimte_warmtepomp_esp_wifi_signaal
+        name: Wifi ESP
+      - type: button
+        entity: button.schuur_ketelruimte_warmtepomp_esp_melding_bevestigen
+        name: Melding bevestigen
+        icon: mdi:bell-check
+        show_state: false
+        tap_action:
+          action: perform-action
+          perform_action: button.press
+          target:
+            entity_id: button.schuur_ketelruimte_warmtepomp_esp_melding_bevestigen
+      - type: button
+        name: ESP-pagina openen
+        icon: mdi:open-in-new
+        show_state: false
+        tap_action:
+          action: url
+          url_path: http://192.168.1.192/
+
+  # ----------------------------------------------------- Temperaturen
+  - type: grid
+    cards:
+      - type: heading
+        heading: Temperaturen
+        icon: mdi:thermometer
+      - type: tile
+        entity: sensor.node_5_analog_logging_4
+        name: Aanvoer (S4)
+      - type: tile
+        entity: sensor.node_5_analog_logging_3
+        name: Retour (S3)
+      - type: tile
+        entity: sensor.node_5_analog_logging_6
+        name: Boiler boven (S6)
+      - type: tile
+        entity: sensor.node_5_analog_logging_5
+        name: Buiten (S5)
+      - type: tile
+        entity: sensor.node_5_analog_logging_2
+        name: Van de bron (S2)
+      - type: tile
+        entity: sensor.node_5_analog_logging_1
+        name: Naar de bron (S1)
+      - type: tile
+        entity: sensor.klimaat_woonkamer_temperature
+        name: Woonkamer (Zigbee)
+      - type: tile
+        entity: sensor.node_5_dl_bus_2
+        name: Woonkamer (RAS)
+      - type: tile
+        entity: sensor.node_5_dl_bus_1
+        name: Gewenst (RAS)
+      - type: tile
+        entity: sensor.node_5_dl_bus_4
+        name: Dauwpunt woonkamer
+
+  # --------------------------------------------------------- Grafieken
+  - type: grid
+    column_span: 3
+    cards:
+      - type: heading
+        heading: Grafieken
+        icon: mdi:chart-line
+      - type: history-graph
+        title: Temperaturen, laatste 24 uur
+        hours_to_show: 24
+        grid_options:
+          columns: 12
+        entities:
+          - entity: sensor.node_5_analog_logging_4
+            name: Aanvoer (S4)
+          - entity: sensor.node_5_analog_logging_3
+            name: Retour (S3)
+          - entity: sensor.node_5_analog_logging_6
+            name: Boiler (S6)
+          - entity: sensor.node_5_analog_logging_5
+            name: Buiten (S5)
+          - entity: sensor.klimaat_woonkamer_temperature
+            name: Woonkamer
+      - type: history-graph
+        title: Stroom, laatste 24 uur
+        hours_to_show: 24
+        grid_options:
+          columns: 12
+        entities:
+          - entity: sensor.energymeter_warmtepomp_power
+            name: Warmtepomp
+          - entity: sensor.stp8_0_3av_40_127_pv_power
+            name: Zonnepanelen
+          - entity: sensor.p1_meter_power
+            name: Net (P1)
+      - type: history-graph
+        title: Starts per dag, laatste week
+        hours_to_show: 168
+        grid_options:
+          columns: 12
+        entities:
+          - entity: sensor.starts_warmtepomp_vandaag
+            name: Starts
