@@ -1,0 +1,218 @@
+blueprint:
+  name: "Warmtepomp: melding versturen"
+  description: >-
+    Stuurt een melding van de warmtepomp naar je telefoon, het dashboard en
+    (bij een storing) de speakers. Hier kies je eenmalig de telefoon, de
+    speakers, de spraakdienst en de stille uren. De automation
+    "Warmtepomp: meldingen" gebruikt dit script.
+
+
+    Versie H2 2026-11-13.
+  domain: script
+  author: Robert
+  source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/script/warmtepomp/melding_warmtepomp.yaml
+  input:
+    telefoon_sectie:
+      name: Telefoon
+      icon: mdi:cellphone
+      input:
+        telefoon:
+          name: Telefoon
+          description: De telefoon met de Home Assistant-app die de meldingen krijgt.
+          selector:
+            device:
+              filter:
+                - integration: mobile_app
+    speaker_sectie:
+      name: Speakers
+      icon: mdi:speaker
+      input:
+        spraakdienst:
+          name: Spraakdienst
+          description: De dienst die tekst uitspreekt.
+          default: tts.google_translate_en_com
+          selector:
+            entity:
+              filter:
+                - domain: tts
+        taal:
+          name: Taal
+          default: "nl"
+          selector:
+            text:
+        speakers:
+          name: Speakers
+          description: Deze speakers spreken een storing uit (niet die van Flinn).
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: media_player
+        extra_speaker:
+          name: Extra speaker bij beweging
+          description: Deze speaker spreekt alleen als er beweging is in die ruimte (bijvoorbeeld het hobbyhok).
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: media_player
+        extra_beweging:
+          name: Bewegingssensor bij de extra speaker
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: binary_sensor
+        testfase:
+          name: Schakelaar testfase
+          description: Staat deze aan, dan spreekt alleen de testspeaker.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: input_boolean
+        testspeaker:
+          name: Testspeaker
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: media_player
+        stil_vanaf:
+          name: Stil vanaf
+          default: "22:00:00"
+          selector:
+            time:
+        stil_tot:
+          name: Stil tot
+          default: "07:30:00"
+          selector:
+            time:
+    esp_sectie:
+      name: Warmtepomp-ESP
+      icon: mdi:chip
+      input:
+        onderhoud_bezig:
+          name: Onderhoud bezig
+          description: Tijdens een onderhoudsklus blijven de speakers stil.
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: binary_sensor
+
+mode: queued
+max: 10
+icon: mdi:heat-pump
+
+fields:
+  titel:
+    name: Titel
+    required: true
+    example: "Storing warmtepomp: Hoge druk"
+    selector:
+      text:
+  tekst:
+    name: Tekst
+    required: true
+    example: "Controleer de doorstroming van de afgifte."
+    selector:
+      text:
+        multiline: true
+  niveau:
+    name: Niveau
+    required: true
+    example: storing
+    selector:
+      select:
+        options:
+          - storing
+          - waarschuwing
+          - dashboard
+          - opgelost
+  spreek:
+    name: Uitspreken
+    description: Ook op de speakers (alleen bij een storing).
+    default: false
+    selector:
+      boolean:
+
+variables:
+  spraakdienst: !input spraakdienst
+  taal: !input taal
+  speakers_normaal: !input speakers
+  extra_speaker: !input extra_speaker
+  extra_beweging: !input extra_beweging
+  testfase: !input testfase
+  testspeaker: !input testspeaker
+  stil_vanaf: !input stil_vanaf
+  stil_tot: !input stil_tot
+  onderhoud_bezig: !input onderhoud_bezig
+
+sequence:
+  - variables:
+      spreken: "{{ spreek | default(false) | bool }}"
+      klus_bezig: "{{ onderhoud_bezig != '' and is_state(onderhoud_bezig, 'on') }}"
+      stil_nu: >-
+        {{ now().strftime('%H:%M:%S') >= stil_vanaf or now().strftime('%H:%M:%S') < stil_tot }}
+      lijst: >-
+        {{ [testspeaker] if (testfase != '' and testspeaker != '' and is_state(testfase, 'on'))
+           else (speakers_normaal + [extra_speaker]
+                 if (extra_speaker != '' and extra_beweging != '' and is_state(extra_beweging, 'on'))
+                 else speakers_normaal) }}
+
+  # 1. Dashboard
+  - choose:
+      - conditions: "{{ niveau == 'opgelost' }}"
+        sequence:
+          - action: persistent_notification.dismiss
+            data:
+              notification_id: warmtepomp_melding
+    default:
+      - action: persistent_notification.create
+        data:
+          notification_id: warmtepomp_melding
+          title: "{{ titel }}"
+          message: "{{ tekst }} ({{ now().strftime('%d-%m %H:%M') }})"
+
+  # 2. Telefoon: met voorrang bij een storing, niet bij niveau 'dashboard'
+  - choose:
+      - conditions: "{{ niveau == 'storing' }}"
+        sequence:
+          - domain: mobile_app
+            type: notify
+            device_id: !input telefoon
+            title: "{{ titel }}"
+            message: "{{ tekst }}"
+            data:
+              tag: warmtepomp
+              channel: Warmtepomp storing
+              importance: high
+              priority: high
+              ttl: 0
+              clickAction: /lovelace
+      - conditions: "{{ niveau in ['waarschuwing', 'opgelost'] }}"
+        sequence:
+          - domain: mobile_app
+            type: notify
+            device_id: !input telefoon
+            title: "{{ titel }}"
+            message: "{{ tekst }}"
+            data:
+              tag: warmtepomp
+              channel: Warmtepomp
+              clickAction: /lovelace
+
+  # 3. Speakers: alleen bij een storing, buiten de stille uren, niet tijdens
+  #    een onderhoudsklus
+  - if: "{{ spreken and niveau == 'storing' and not stil_nu and not klus_bezig and lijst | length > 0 }}"
+    then:
+      - action: tts.speak
+        target:
+          entity_id: "{{ spraakdienst }}"
+        data:
+          media_player_entity_id: "{{ lijst }}"
+          language: "{{ taal }}"
+          message: "{{ titel }}. {{ tekst }}"
+        continue_on_error: true

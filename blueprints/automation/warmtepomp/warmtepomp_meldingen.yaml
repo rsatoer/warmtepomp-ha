@@ -1,0 +1,167 @@
+blueprint:
+  name: "Warmtepomp: meldingen"
+  description: >-
+    Stuurt de meldingen van de warmtepomp-ESP door via het script
+    "Warmtepomp: melding versturen": storingen (met wat je kunt doen),
+    C.M.I. onbereikbaar, onderhoud te laat, ESP offline en opgelost.
+
+
+    Versie H2 2026-11-13.
+  domain: automation
+  author: Robert
+  source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/automation/warmtepomp/warmtepomp_meldingen.yaml
+  input:
+    melding:
+      name: Melding van de ESP
+      description: De tekstsensor "Melding" van de warmtepomp-ESP.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+    melding_actief:
+      name: Melding actief van de ESP
+      description: Wordt gebruikt om te zien of de ESP offline is.
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
+    script:
+      name: Script voor de melding
+      description: 'Het script dat je maakte met de blueprint "Warmtepomp: melding versturen".'
+      selector:
+        entity:
+          filter:
+            - domain: script
+    offline_minuten:
+      name: ESP offline na
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 60
+          unit_of_measurement: min
+
+mode: queued
+max: 10
+
+triggers:
+  - trigger: state
+    entity_id: !input melding
+    id: melding
+  - trigger: state
+    entity_id: !input melding_actief
+    to: "unavailable"
+    for:
+      minutes: !input offline_minuten
+    id: offline
+  - trigger: state
+    entity_id: !input melding_actief
+    from: "unavailable"
+    id: online
+
+variables:
+  script_id: !input script
+  offline_min: !input offline_minuten
+  negeer: ["Geen", "unavailable", "unknown", "", "Home Assistant weggevallen"]
+  storingen:
+    - "Hoge druk"
+    - "Lage druk"
+    - "Temperatuurverschil secundair te hoog"
+    - "Aanvoer secundair te hoog"
+    - "Retour secundair te hoog"
+    - "Temperatuurverschil primair te groot"
+    - "Primaire uitgang te laag"
+    - "Temperatuurverschil bij koelen te hoog"
+    - "Secundaire uitgang bij koelen te laag"
+  advies:
+    "Hoge druk": "Controleer de doorstroming van de afgifte: kraan dicht, filter 2 vuil, lucht of de cv-pomp. Lees de druk van de afgifte af."
+    "Lage druk": "Controleer de doorstroming van de bron: filter 1 vuil, lucht, de bronpomp of een kraan dicht. Of de bron is te koud."
+    "Temperatuurverschil secundair te hoog": "Te weinig doorstroming in de afgifte: filter 2, lucht, de cv-pomp of groepen dicht."
+    "Aanvoer secundair te hoog": "Te weinig doorstroming in de afgifte, of een te hoge gewenste temperatuur."
+    "Retour secundair te hoog": "Te weinig doorstroming in de afgifte, of een te hoge gewenste temperatuur."
+    "Temperatuurverschil primair te groot": "Te weinig doorstroming in de bron: filter 1, lucht of de bronpomp."
+    "Primaire uitgang te laag": "Bron te koud of te weinig doorstroming; kans op bevriezing. Laat de glycol controleren."
+    "Temperatuurverschil bij koelen te hoog": "Te weinig doorstroming tijdens het koelen."
+    "Secundaire uitgang bij koelen te laag": "Kans op bevriezing van de warmtewisselaar. Controleer de doorstroming en de koelwens."
+    "C.M.I. onbereikbaar": "De ESP hoort de C.M.I. niet meer. Controleer of de C.M.I. aan staat en verbonden is met het netwerk."
+    "Onderhoud te laat": "Het jaarlijkse onderhoud is over tijd. Plan het in en klik daarna op Onderhoud gedaan op de ESP-pagina."
+    "P1-meter onbereikbaar": "De ESP krijgt geen gegevens van de P1-meter. Zonneladen zonder Home Assistant werkt dan niet."
+
+actions:
+  - choose:
+      # Nieuwe melding
+      - conditions:
+          - condition: trigger
+            id: melding
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state is not none and trigger.to_state.state not in negeer
+                 and (trigger.from_state is none or trigger.to_state.state != trigger.from_state.state) }}
+        sequence:
+          - variables:
+              naam: "{{ trigger.to_state.state }}"
+              niveau: >-
+                {{ 'storing' if naam in storingen
+                   else ('dashboard' if naam == 'P1-meter onbereikbaar' else 'waarschuwing') }}
+          - action: script.turn_on
+            target:
+              entity_id: "{{ script_id }}"
+            data:
+              variables:
+                titel: "{{ ('Storing warmtepomp: ' if niveau == 'storing' else 'Warmtepomp: ') ~ naam }}"
+                tekst: "{{ advies.get(naam, 'Kijk op de ESP-pagina voor meer informatie.') }}"
+                niveau: "{{ niveau }}"
+                spreek: "{{ niveau == 'storing' }}"
+
+      # Melding opgelost
+      - conditions:
+          - condition: trigger
+            id: melding
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state is not none and trigger.to_state.state == 'Geen'
+                 and trigger.from_state is not none and trigger.from_state.state not in negeer }}
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: "{{ script_id }}"
+            data:
+              variables:
+                titel: "Warmtepomp: opgelost"
+                tekst: "{{ trigger.from_state.state }} is weg."
+                niveau: opgelost
+
+      # ESP offline
+      - conditions:
+          - condition: trigger
+            id: offline
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: "{{ script_id }}"
+            data:
+              variables:
+                titel: "Warmtepomp: ESP offline"
+                tekst: >-
+                  Home Assistant hoort de warmtepomp-ESP al {{ offline_min }} minuten niet.
+                  De warmtepomp regelt zelf door. Controleer de voeding en de wifi van de ESP in de schuur.
+                niveau: waarschuwing
+
+      # ESP weer online, na langer dan de offline-tijd
+      - conditions:
+          - condition: trigger
+            id: online
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state.state in ['on', 'off']
+                 and (now() - trigger.from_state.last_changed).total_seconds() > offline_min * 60 }}
+        sequence:
+          - action: script.turn_on
+            target:
+              entity_id: "{{ script_id }}"
+            data:
+              variables:
+                titel: "Warmtepomp: ESP weer online"
+                tekst: >-
+                  De ESP is terug na {{ ((now() - trigger.from_state.last_changed).total_seconds() / 60) | round(0) | int }} minuten.
+                niveau: opgelost
