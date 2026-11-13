@@ -1,0 +1,242 @@
+blueprint:
+  name: "Warmtepomp: woonkamer"
+  description: >-
+    Bepaalt de gewenste temperatuur van de woonkamer en stuurt die naar de
+    warmtepomp-ESP, samen met de gemeten temperatuur van de Zigbee-sensor.
+    Binnen het weekschema geldt de comforttemperatuur, met een toeslag als er
+    iemand thuis is of als er kort geleden beweging was. Buiten het schema
+    geldt de lage temperatuur. Staat Vakantie aan, dan geldt de
+    vakantietemperatuur. Verwarmen toegestaan staat aan, behalve als er
+    koelvraag is. Valt Home Assistant weg, dan regelt de UVR weer zelf.
+
+
+    Versie H5b 2026-11-13: temperaturen uit helpers.
+  domain: automation
+  author: Robert
+  source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/automation/warmtepomp/warmtepomp_woonkamer.yaml
+  input:
+    temperaturen:
+      name: Temperaturen (helpers)
+      icon: mdi:thermometer
+      description: Vier getal-helpers, zodat je de temperaturen op het dashboard kunt verschuiven. Zie dashboard/H5-helpers.md.
+      input:
+        helper_comfort:
+          name: Comfort
+          description: Binnen het weekschema.
+          default: input_number.woonkamer_comfort
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+        helper_laag:
+          name: Laag
+          description: Buiten het weekschema (nacht, overdag weg).
+          default: input_number.woonkamer_laag
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+        helper_toeslag:
+          name: Toeslag als er iemand thuis is
+          description: Komt binnen het weekschema bovenop de comforttemperatuur.
+          default: input_number.woonkamer_toeslag_thuis
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+        helper_vakantie:
+          name: Vakantie
+          description: Als de schakelaar Vakantie op de ESP aan staat.
+          default: input_number.woonkamer_vakantie
+          selector:
+            entity:
+              filter:
+                - domain: input_number
+    wanneer:
+      name: Schema en aanwezigheid
+      icon: mdi:calendar-clock
+      input:
+        schema:
+          name: Weekschema
+          description: 'Een helper van het type Schema. Aan = comfort.'
+          default: schedule.warmtepomp_comfort
+          selector:
+            entity:
+              filter:
+                - domain: schedule
+        personen:
+          name: Wie telt als thuis
+          default:
+            - person.rsatoer
+            - person.salina
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: person
+        bewegingen:
+          name: Bewegingssensoren
+          description: Beweging in de laatste minuten telt ook als thuis (bijvoorbeeld als alleen Flinn thuis is).
+          default:
+            - binary_sensor.pir_woonkamer_occupancy
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: binary_sensor
+        beweging_minuten:
+          name: Beweging telt mee
+          default: 30
+          selector:
+            number:
+              min: 5
+              max: 240
+              step: 5
+              unit_of_measurement: min
+              mode: box
+    sensoren:
+      name: Sensor en ESP
+      icon: mdi:chip
+      input:
+        zigbee:
+          name: Temperatuur woonkamer
+          description: De Zigbee-sensor. Valt Home Assistant weg, dan gebruikt de UVR weer de RAS.
+          default: sensor.klimaat_woonkamer_temperature
+          selector:
+            entity:
+              filter:
+                - domain: sensor
+                  device_class: temperature
+        esp_gemeten:
+          name: "ESP: Gemeten temperatuur woonkamer"
+          default: number.schuur_ketelruimte_warmtepomp_esp_gemeten_temperatuur_woonkamer
+          selector:
+            entity:
+              filter:
+                - domain: number
+                  integration: esphome
+        esp_gewenst:
+          name: "ESP: Gewenste temperatuur woonkamer"
+          default: number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer
+          selector:
+            entity:
+              filter:
+                - domain: number
+                  integration: esphome
+        esp_verwarmen:
+          name: "ESP: Verwarmen toegestaan"
+          default: switch.schuur_ketelruimte_warmtepomp_esp_verwarmen_toegestaan
+          selector:
+            entity:
+              filter:
+                - domain: switch
+                  integration: esphome
+        esp_koelvraag:
+          name: "ESP: Koelvraag"
+          default: switch.schuur_ketelruimte_warmtepomp_esp_koelvraag
+          selector:
+            entity:
+              filter:
+                - domain: switch
+                  integration: esphome
+        esp_vakantie:
+          name: "ESP: Vakantie"
+          default: switch.schuur_ketelruimte_warmtepomp_esp_vakantie
+          selector:
+            entity:
+              filter:
+                - domain: switch
+                  integration: esphome
+
+mode: queued
+max: 3
+max_exceeded: silent
+
+triggers:
+  # De gemeten temperatuur meteen doorgeven
+  - trigger: state
+    entity_id: !input zigbee
+  - trigger: state
+    entity_id: !input schema
+  - trigger: state
+    entity_id:
+      - !input helper_comfort
+      - !input helper_laag
+      - !input helper_toeslag
+      - !input helper_vakantie
+  - trigger: state
+    entity_id:
+      - !input esp_vakantie
+      - !input esp_koelvraag
+  # ESP weer bereikbaar
+  - trigger: state
+    entity_id: !input esp_gewenst
+    from: "unavailable"
+  # Elke 5 minuten: de ESP laat de meting na 15 minuten zonder nieuwe waarde
+  # vallen, en zo tellen thuiskomst en beweging ook mee.
+  - trigger: time_pattern
+    minutes: "/5"
+  - trigger: homeassistant
+    event: start
+
+variables:
+  helper_comfort: !input helper_comfort
+  helper_laag: !input helper_laag
+  helper_toeslag: !input helper_toeslag
+  helper_vakantie: !input helper_vakantie
+  schema: !input schema
+  personen: !input personen
+  bewegingen: !input bewegingen
+  beweging_min: !input beweging_minuten
+  zigbee: !input zigbee
+  esp_gewenst: !input esp_gewenst
+  esp_verwarmen: !input esp_verwarmen
+  esp_koelvraag: !input esp_koelvraag
+  esp_vakantie: !input esp_vakantie
+
+conditions:
+  - condition: template
+    value_template: "{{ states(esp_gewenst) != 'unavailable' }}"
+
+actions:
+  - variables:
+      t_comfort: "{{ states(helper_comfort) | float(19) }}"
+      t_laag: "{{ states(helper_laag) | float(17) }}"
+      t_toeslag: "{{ states(helper_toeslag) | float(1) }}"
+      t_vakantie: "{{ states(helper_vakantie) | float(16) }}"
+      meting: "{{ states(zigbee) | float(-100) }}"
+      thuis: "{{ expand(personen) | selectattr('state', 'eq', 'home') | list | count > 0 }}"
+      beweging: "{{ expand(bewegingen) | selectattr('state', 'eq', 'on') | list | count > 0 or expand(bewegingen) | selectattr('state', 'eq', 'off') | selectattr('last_changed', 'gt', now() - timedelta(minutes=beweging_min | int(30))) | list | count > 0 }}"
+      doel_ruw: "{{ t_vakantie if is_state(esp_vakantie, 'on') else ((t_comfort + (t_toeslag if (thuis or beweging) else 0)) if is_state(schema, 'on') else t_laag) }}"
+      doel: "{{ ([([doel_ruw | float(t_laag), 15] | max), 25] | min) | round(1) }}"
+      verwarmen_moet: "{{ not is_state(esp_koelvraag, 'on') }}"
+
+  # 1. Gemeten temperatuur naar de ESP
+  - if: "{{ 5 <= meting <= 35 }}"
+    then:
+      - action: number.set_value
+        target:
+          entity_id: !input esp_gemeten
+        data:
+          value: "{{ meting | round(1) }}"
+
+  # 2. Gewenste temperatuur, alleen als hij verandert
+  - if: "{{ (states(esp_gewenst) | float(0) - doel) | abs > 0.05 }}"
+    then:
+      - action: number.set_value
+        target:
+          entity_id: !input esp_gewenst
+        data:
+          value: "{{ doel }}"
+
+  # 3. Verwarmen toegestaan, behalve bij koelvraag
+  - if: "{{ verwarmen_moet and not is_state(esp_verwarmen, 'on') }}"
+    then:
+      - action: switch.turn_on
+        target:
+          entity_id: !input esp_verwarmen
+  - if: "{{ not verwarmen_moet and is_state(esp_verwarmen, 'on') }}"
+    then:
+      - action: switch.turn_off
+        target:
+          entity_id: !input esp_verwarmen
