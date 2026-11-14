@@ -3,10 +3,11 @@ blueprint:
   description: >-
     Stuurt de meldingen van de warmtepomp-ESP door via het script
     "Warmtepomp: melding versturen": storingen (met wat je kunt doen),
-    C.M.I. onbereikbaar, onderhoud te laat, ESP offline en opgelost.
+    C.M.I. onbereikbaar, onderhoud te laat, de onderhoudstaken filter 1 en 2
+    schoonmaken, ESP offline en opgelost.
 
 
-    Versie H2 2026-11-13.
+    Versie C4b 2026-11-14.
   domain: automation
   author: Robert
   source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/automation/warmtepomp/warmtepomp_meldingen.yaml
@@ -86,6 +87,8 @@ variables:
     "C.M.I. onbereikbaar": "De ESP hoort de C.M.I. niet meer. Controleer of de C.M.I. aan staat en verbonden is met het netwerk."
     "Onderhoud te laat": "Het jaarlijkse onderhoud is over tijd. Plan het in en klik daarna op Onderhoud gedaan op de ESP-pagina."
     "P1-meter onbereikbaar": "De ESP krijgt geen gegevens van de P1-meter. Zonneladen zonder Home Assistant werkt dan niet."
+    "Filter 1 schoonmaken": "Onderhoudstaak: de doorstroming van de bron is te laag (het verschil S2 - S1 is te groot). Maak filter 1 schoon met de klus op de ESP-pagina; daarna verdwijnt deze melding."
+    "Filter 2 schoonmaken": "Onderhoudstaak: de doorstroming van de afgifte is te laag (het verschil S4 - S3 is te groot). Maak filter 2 schoon met de klus op de ESP-pagina; daarna verdwijnt deze melding."
 
 actions:
   - choose:
@@ -100,6 +103,7 @@ actions:
         sequence:
           - variables:
               naam: "{{ trigger.to_state.state }}"
+              taak: "{{ naam in ['Filter 1 schoonmaken', 'Filter 2 schoonmaken'] }}"
               niveau: >-
                 {{ 'storing' if naam in storingen
                    else ('dashboard' if naam == 'P1-meter onbereikbaar' else 'waarschuwing') }}
@@ -108,7 +112,7 @@ actions:
               entity_id: "{{ script_id }}"
             data:
               variables:
-                titel: "{{ ('Storing warmtepomp: ' if niveau == 'storing' else 'Warmtepomp: ') ~ naam }}"
+                titel: "{{ ('Storing warmtepomp: ' if niveau == 'storing' else ('Onderhoudstaak warmtepomp: ' if taak else 'Warmtepomp: ')) ~ naam }}"
                 tekst: "{{ advies.get(naam, 'Kijk op de ESP-pagina voor meer informatie.') }}"
                 niveau: "{{ niveau }}"
                 spreek: "{{ niveau == 'storing' }}"
