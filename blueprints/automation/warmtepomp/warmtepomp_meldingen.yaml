@@ -1,27 +1,27 @@
 blueprint:
   name: "Warmtepomp: meldingen"
   description: >-
-    Stuurt de meldingen van de warmtepomp-ESP door via het script
+    Stuurt de meldingen van de warmtepomp-controller door via het script
     "Warmtepomp: melding versturen": storingen (met wat je kunt doen),
     C.M.I. onbereikbaar, onderhoud te laat, de onderhoudstaken filter 1 en 2
-    schoonmaken, ESP offline en opgelost.
+    schoonmaken, controller offline en opgelost.
 
 
-    Versie C4b 2026-11-14.
+    Versie C8 2026-11-16: "ESP" heet nu "controller".
   domain: automation
   author: Robert
   source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/automation/warmtepomp/warmtepomp_meldingen.yaml
   input:
     melding:
-      name: Melding van de ESP
-      description: De tekstsensor "Melding" van de warmtepomp-ESP.
+      name: Melding van de controller
+      description: De tekstsensor "Melding" van de warmtepomp-controller.
       selector:
         entity:
           filter:
             - domain: sensor
     melding_actief:
-      name: Melding actief van de ESP
-      description: Wordt gebruikt om te zien of de ESP offline is.
+      name: Melding actief van de controller
+      description: Wordt gebruikt om te zien of de controller offline is.
       selector:
         entity:
           filter:
@@ -34,7 +34,7 @@ blueprint:
           filter:
             - domain: script
     offline_minuten:
-      name: ESP offline na
+      name: Controller offline na
       default: 5
       selector:
         number:
@@ -84,11 +84,11 @@ variables:
     "Primaire uitgang te laag": "Bron te koud of te weinig doorstroming; kans op bevriezing. Laat de glycol controleren."
     "Temperatuurverschil bij koelen te hoog": "Te weinig doorstroming tijdens het koelen."
     "Secundaire uitgang bij koelen te laag": "Kans op bevriezing van de warmtewisselaar. Controleer de doorstroming en de koelwens."
-    "C.M.I. onbereikbaar": "De ESP hoort de C.M.I. niet meer. Controleer of de C.M.I. aan staat en verbonden is met het netwerk."
-    "Onderhoud te laat": "Het jaarlijkse onderhoud is over tijd. Plan het in en klik daarna op Onderhoud gedaan op de ESP-pagina."
-    "P1-meter onbereikbaar": "De ESP krijgt geen gegevens van de P1-meter. Zonneladen zonder Home Assistant werkt dan niet."
-    "Filter 1 schoonmaken": "Onderhoudstaak: de doorstroming van de bron is te laag (het verschil S2 - S1 is te groot). Maak filter 1 schoon met de klus op de ESP-pagina; daarna verdwijnt deze melding."
-    "Filter 2 schoonmaken": "Onderhoudstaak: de doorstroming van de afgifte is te laag (het verschil S4 - S3 is te groot). Maak filter 2 schoon met de klus op de ESP-pagina; daarna verdwijnt deze melding."
+    "C.M.I. onbereikbaar": "De controller hoort de C.M.I. niet meer. Controleer of de C.M.I. aan staat en verbonden is met het netwerk."
+    "Onderhoud te laat": "Het jaarlijkse onderhoud is over tijd. Plan het in en klik daarna op Onderhoud gedaan op de controller-pagina."
+    "P1-meter onbereikbaar": "De controller krijgt geen gegevens van de P1-meter. Zonneladen zonder Home Assistant werkt dan niet."
+    "Filter 1 schoonmaken": "Onderhoudstaak: de doorstroming van de bron is te laag (het verschil S2 - S1 is te groot). Maak filter 1 schoon met de klus op de controller-pagina; daarna verdwijnt deze melding."
+    "Filter 2 schoonmaken": "Onderhoudstaak: de doorstroming van de afgifte is te laag (het verschil S4 - S3 is te groot). Maak filter 2 schoon met de klus op de controller-pagina; daarna verdwijnt deze melding."
 
 actions:
   - choose:
@@ -113,7 +113,7 @@ actions:
             data:
               variables:
                 titel: "{{ ('Storing warmtepomp: ' if niveau == 'storing' else ('Onderhoudstaak warmtepomp: ' if taak else 'Warmtepomp: ')) ~ naam }}"
-                tekst: "{{ advies.get(naam, 'Kijk op de ESP-pagina voor meer informatie.') }}"
+                tekst: "{{ advies.get(naam, 'Kijk op de controller-pagina voor meer informatie.') }}"
                 niveau: "{{ niveau }}"
                 spreek: "{{ niveau == 'storing' }}"
 
@@ -135,7 +135,7 @@ actions:
                 tekst: "{{ trigger.from_state.state }} is weg."
                 niveau: opgelost
 
-      # ESP offline
+      # Controller offline
       - conditions:
           - condition: trigger
             id: offline
@@ -145,13 +145,13 @@ actions:
               entity_id: "{{ script_id }}"
             data:
               variables:
-                titel: "Warmtepomp: ESP offline"
+                titel: "Warmtepomp: controller offline"
                 tekst: >-
-                  Home Assistant hoort de warmtepomp-ESP al {{ offline_min }} minuten niet.
-                  De warmtepomp regelt zelf door. Controleer de voeding en de wifi van de ESP in de schuur.
+                  Home Assistant hoort de warmtepomp-controller al {{ offline_min }} minuten niet.
+                  De warmtepomp regelt zelf door. Controleer de voeding en de wifi van de controller.
                 niveau: waarschuwing
 
-      # ESP weer online, na langer dan de offline-tijd
+      # Controller weer online, na langer dan de offline-tijd
       - conditions:
           - condition: trigger
             id: online
@@ -165,7 +165,7 @@ actions:
               entity_id: "{{ script_id }}"
             data:
               variables:
-                titel: "Warmtepomp: ESP weer online"
+                titel: "Warmtepomp: controller weer online"
                 tekst: >-
-                  De ESP is terug na {{ ((now() - trigger.from_state.last_changed).total_seconds() / 60) | round(0) | int }} minuten.
+                  De controller is terug na {{ ((now() - trigger.from_state.last_changed).total_seconds() / 60) | round(0) | int }} minuten.
                 niveau: opgelost

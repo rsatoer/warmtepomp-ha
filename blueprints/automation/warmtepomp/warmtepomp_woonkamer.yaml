@@ -2,7 +2,7 @@ blueprint:
   name: "Warmtepomp: woonkamer"
   description: >-
     Bepaalt de gewenste temperatuur van de woonkamer en stuurt die naar de
-    warmtepomp-ESP, samen met de gemeten temperatuur van de Zigbee-sensor.
+    warmtepomp-controller, samen met de gemeten temperatuur van de Zigbee-sensor.
     Binnen het weekschema geldt de comforttemperatuur, met een toeslag als er
     iemand thuis is of als er kort geleden beweging was. Buiten het schema
     geldt de lage temperatuur. Staat Vakantie aan, dan geldt de
@@ -10,7 +10,7 @@ blueprint:
     koelvraag is. Valt Home Assistant weg, dan regelt de UVR weer zelf.
 
 
-    Versie H5b 2026-11-13: temperaturen uit helpers.
+    Versie H5b 2026-11-13: temperaturen uit helpers. C8 2026-11-16: "ESP" heet nu "controller".
   domain: automation
   author: Robert
   source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/automation/warmtepomp/warmtepomp_woonkamer.yaml
@@ -46,7 +46,7 @@ blueprint:
                 - domain: input_number
         helper_vakantie:
           name: Vakantie
-          description: Als de schakelaar Vakantie op de ESP aan staat.
+          description: Als de schakelaar Vakantie op de controller aan staat.
           default: input_number.woonkamer_vakantie
           selector:
             entity:
@@ -95,7 +95,7 @@ blueprint:
               unit_of_measurement: min
               mode: box
     sensoren:
-      name: Sensor en ESP
+      name: Sensor en controller
       icon: mdi:chip
       input:
         zigbee:
@@ -108,7 +108,7 @@ blueprint:
                 - domain: sensor
                   device_class: temperature
         esp_gemeten:
-          name: "ESP: Gemeten temperatuur woonkamer"
+          name: "Controller: gemeten temperatuur woonkamer"
           default: number.schuur_ketelruimte_warmtepomp_esp_gemeten_temperatuur_woonkamer
           selector:
             entity:
@@ -116,7 +116,7 @@ blueprint:
                 - domain: number
                   integration: esphome
         esp_gewenst:
-          name: "ESP: Gewenste temperatuur woonkamer"
+          name: "Controller: gewenste temperatuur woonkamer"
           default: number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer
           selector:
             entity:
@@ -124,7 +124,7 @@ blueprint:
                 - domain: number
                   integration: esphome
         esp_verwarmen:
-          name: "ESP: Verwarmen toegestaan"
+          name: "Controller: verwarmen toegestaan"
           default: switch.schuur_ketelruimte_warmtepomp_esp_verwarmen_toegestaan
           selector:
             entity:
@@ -132,7 +132,7 @@ blueprint:
                 - domain: switch
                   integration: esphome
         esp_koelvraag:
-          name: "ESP: Koelvraag"
+          name: "Controller: koelvraag"
           default: switch.schuur_ketelruimte_warmtepomp_esp_koelvraag
           selector:
             entity:
@@ -140,7 +140,7 @@ blueprint:
                 - domain: switch
                   integration: esphome
         esp_vakantie:
-          name: "ESP: Vakantie"
+          name: "Controller: vakantie"
           default: switch.schuur_ketelruimte_warmtepomp_esp_vakantie
           selector:
             entity:
