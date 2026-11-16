@@ -90,7 +90,7 @@ blueprint:
           selector:
             time:
     esp_sectie:
-      name: Warmtepomp-ESP
+      name: Warmtepomp-controller
       icon: mdi:chip
       input:
         onderhoud_bezig:
