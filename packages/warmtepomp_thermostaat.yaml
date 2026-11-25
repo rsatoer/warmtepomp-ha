@@ -1,0 +1,91 @@
+# Warmtepomp - thermostaat woonkamer (versie 2026-11-17b)
+#
+# Een ronde thermostaat op het dashboard, zoals de RAS:
+#   - een keuzemenu Stand: Automatisch, Handmatig, Koelen of Vakantie
+#   - Automatisch: weekschema; de knop toont wat HA vraagt. Draai je eraan,
+#     dan gaat de stand naar Handmatig met die temperatuur (blijvend, tot je
+#     zelf weer Automatisch kiest)
+#   - Handmatig: de knop is de vaste temperatuur (input_number.woonkamer_handmatig)
+#   - eronder "HA vraagt nu" met de reden
+#
+# Zet dit bestand in de map /config/packages/ en zorg dat configuration.yaml
+# deze regels heeft (zie dashboard/Thermostaat.md):
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# De thermostaat stuurt zelf niets aan. Hij schakelt alleen de hulpschakelaar
+# hieronder, die nergens op aangesloten is. De echte regeling blijft:
+# automatisering "Warmtepomp woonkamer" -> controller -> UVR.
+
+input_boolean:
+  woonkamer_thermostaat_hulp:
+    name: Woonkamer thermostaat (hulp, niet gebruiken)
+    icon: mdi:link-variant-off
+  woonkamer_instellingen_tonen:
+    name: Woonkamer instellingen tonen
+    icon: mdi:tune-variant
+
+input_select:
+  woonkamer_stand:
+    name: Woonkamer stand
+    icon: mdi:home-thermometer-outline
+    options:
+      - Automatisch
+      - Handmatig
+      - Koelen
+      - Vakantie
+
+input_number:
+  woonkamer_handmatig:
+    name: Woonkamer handmatig
+    icon: mdi:hand-back-right-outline
+    min: 15
+    max: 25
+    step: 0.5
+    unit_of_measurement: "°C"
+    mode: slider
+
+climate:
+  - platform: generic_thermostat
+    name: Woonkamer
+    unique_id: warmtepomp_woonkamer_thermostaat
+    heater: input_boolean.woonkamer_thermostaat_hulp
+    target_sensor: sensor.klimaat_woonkamer_temperature
+    min_temp: 15
+    max_temp: 25
+    target_temp_step: 0.5
+    precision: 0.1
+    cold_tolerance: 0.2
+    hot_tolerance: 0.2
+    initial_hvac_mode: heat
+
+template:
+  - sensor:
+      - name: Woonkamer HA vraagt nu
+        unique_id: warmtepomp_woonkamer_ha_vraagt_nu
+        icon: mdi:thermometer-auto
+        unit_of_measurement: "°C"
+        device_class: temperature
+        state_class: measurement
+        availability: >-
+          {{ states('number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer')
+             | is_number }}
+        state: >-
+          {{ states('number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer')
+             | float(0) | round(1) }}
+        attributes:
+          reden: >-
+            {% set vraagt = states('number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer') | float(0) %}
+            {% set comfort = states('input_number.woonkamer_comfort') | float(0) %}
+            {% if is_state('switch.schuur_ketelruimte_warmtepomp_esp_vakantie', 'on') %}
+              vakantie
+            {% elif is_state('switch.schuur_ketelruimte_warmtepomp_esp_koelvraag', 'on') %}
+              koelen (verwarmen staat uit)
+            {% elif is_state('input_select.woonkamer_stand', 'Handmatig') %}
+              handmatig
+            {% elif is_state('schedule.warmtepomp_comfort', 'on') %}
+              {{ 'comfort + iemand thuis' if vraagt > comfort + 0.05 else 'comfort' }}
+            {% else %}
+              laag (buiten het weekschema)
+            {% endif %}

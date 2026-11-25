@@ -1,0 +1,269 @@
+blueprint:
+  name: "Warmtepomp: thermostaat woonkamer"
+  description: >-
+    De ronde thermostaat op het dashboard, met vier standen. Automatisch:
+    het weekschema; de knop toont wat Home Assistant vraagt. Draai je eraan,
+    dan gaat de stand naar Handmatig met die temperatuur, tot je zelf weer
+    Automatisch kiest. Handmatig: de knop is de vaste temperatuur. Koelen en
+    Vakantie zetten de schakelaars van de controller. De thermostaat stuurt
+    zelf niets aan; de automatisering Warmtepomp woonkamer bepaalt de
+    temperatuur.
+
+
+    Versie 2026-11-17b.
+  domain: automation
+  author: Robert
+  source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/automation/warmtepomp/warmtepomp_thermostaat.yaml
+  input:
+    thermostaat:
+      name: Thermostaat
+      description: De generieke thermostaat uit packages/warmtepomp_thermostaat.yaml.
+      default: climate.woonkamer
+      selector:
+        entity:
+          filter:
+            - domain: climate
+    stand:
+      name: Stand (keuzemenu)
+      description: Met de keuzes Automatisch, Handmatig, Koelen en Vakantie.
+      default: input_select.woonkamer_stand
+      selector:
+        entity:
+          filter:
+            - domain: input_select
+    handmatig:
+      name: Handmatige temperatuur (helper)
+      default: input_number.woonkamer_handmatig
+      selector:
+        entity:
+          filter:
+            - domain: input_number
+    vakantietemp:
+      name: Vakantietemperatuur (helper)
+      default: input_number.woonkamer_vakantie
+      selector:
+        entity:
+          filter:
+            - domain: input_number
+    gewenst:
+      name: "Controller: Gewenste temperatuur woonkamer (wat HA vraagt)"
+      default: number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer
+      selector:
+        entity:
+          filter:
+            - domain: number
+    vakantie:
+      name: "Controller: Vakantie"
+      default: switch.schuur_ketelruimte_warmtepomp_esp_vakantie
+      selector:
+        entity:
+          filter:
+            - domain: switch
+    koelvraag:
+      name: "Controller: Koelvraag"
+      default: switch.schuur_ketelruimte_warmtepomp_esp_koelvraag
+      selector:
+        entity:
+          filter:
+            - domain: switch
+
+mode: queued
+max: 10
+max_exceeded: silent
+
+triggers:
+  # Iemand draait aan de knop (alleen echte personen, niet deze automatisering)
+  - trigger: state
+    entity_id: !input thermostaat
+    attribute: temperature
+    id: knop
+  - trigger: state
+    entity_id: !input thermostaat
+    to: "off"
+    id: uit
+  # Wat de knop moet tonen is veranderd
+  - trigger: state
+    entity_id:
+      - !input gewenst
+      - !input handmatig
+      - !input vakantietemp
+    id: tonen
+  - trigger: state
+    entity_id: !input stand
+    id: stand
+  - trigger: state
+    entity_id:
+      - !input vakantie
+      - !input koelvraag
+    id: schakelaar
+  - trigger: homeassistant
+    event: start
+    id: start
+  - trigger: event
+    event_type: automation_reloaded
+    id: start
+
+variables:
+  thermostaat: !input thermostaat
+  stand: !input stand
+  handmatig: !input handmatig
+  vakantietemp: !input vakantietemp
+  gewenst: !input gewenst
+  vakantie: !input vakantie
+  koelvraag: !input koelvraag
+  nu_stand: "{{ states(stand) }}"
+  knop_t: "{{ state_attr(thermostaat, 'temperature') | float(0) }}"
+  # Wat de knop hoort te tonen in de huidige stand
+  toon: >-
+    {% if nu_stand == 'Handmatig' %}{{ states(handmatig) | float(0) }}
+    {% elif nu_stand == 'Vakantie' %}{{ states(vakantietemp) | float(0) }}
+    {% else %}{{ states(gewenst) | float(0) }}{% endif %}
+  # De stand die bij de schakelaars van de controller hoort
+  stand_moet: >-
+    {% if is_state(vakantie, 'on') %}Vakantie
+    {% elif is_state(koelvraag, 'on') %}Koelen
+    {% elif nu_stand in ['Automatisch', 'Handmatig'] %}{{ nu_stand }}
+    {% else %}Automatisch{% endif %}
+
+actions:
+  - choose:
+      # 1. Een persoon draait aan de knop
+      - conditions:
+          - condition: trigger
+            id: knop
+          - condition: template
+            value_template: >-
+              {{ trigger.to_state.context.user_id is not none
+                 and trigger.to_state.attributes.temperature is number
+                 and (trigger.to_state.attributes.temperature - toon | float(0)) | abs > 0.05 }}
+        sequence:
+          - variables:
+              nieuw: "{{ trigger.to_state.attributes.temperature }}"
+          - if: "{{ nu_stand == 'Vakantie' }}"
+            then:
+              - action: input_number.set_value
+                target:
+                  entity_id: !input vakantietemp
+                data:
+                  value: "{{ nieuw }}"
+            else:
+              # Automatisch of Koelen: naar Handmatig met deze temperatuur
+              - action: input_number.set_value
+                target:
+                  entity_id: !input handmatig
+                data:
+                  value: "{{ nieuw }}"
+              - if: "{{ nu_stand != 'Handmatig' }}"
+                then:
+                  - action: input_select.select_option
+                    target:
+                      entity_id: !input stand
+                    data:
+                      option: Handmatig
+
+      # 2. Thermostaat per ongeluk uit gezet: weer aan (hij stuurt toch niets)
+      - conditions:
+          - condition: trigger
+            id: uit
+        sequence:
+          - action: climate.set_hvac_mode
+            target:
+              entity_id: !input thermostaat
+            data:
+              hvac_mode: heat
+
+      # 3. Stand gekozen: schakelaars van de controller zetten, knop bijwerken
+      - conditions:
+          - condition: trigger
+            id: stand
+        sequence:
+          - if: "{{ is_state(vakantie, 'on') != (nu_stand == 'Vakantie') }}"
+            then:
+              - action: "switch.turn_{{ 'on' if nu_stand == 'Vakantie' else 'off' }}"
+                target:
+                  entity_id: !input vakantie
+          - if: "{{ is_state(koelvraag, 'on') != (nu_stand == 'Koelen') }}"
+            then:
+              - action: "switch.turn_{{ 'on' if nu_stand == 'Koelen' else 'off' }}"
+                target:
+                  entity_id: !input koelvraag
+          - if: "{{ toon | float(0) >= 15 and (knop_t - toon | float(0)) | abs > 0.05 }}"
+            then:
+              - action: climate.set_temperature
+                target:
+                  entity_id: !input thermostaat
+                data:
+                  temperature: "{{ toon | float }}"
+
+      # 4. Schakelaar ergens anders veranderd: stand volgt
+      - conditions:
+          - condition: trigger
+            id: schakelaar
+          - condition: template
+            value_template: >-
+              {{ states(vakantie) in ['on', 'off'] and states(koelvraag) in ['on', 'off']
+                 and nu_stand != stand_moet }}
+        sequence:
+          - action: input_select.select_option
+            target:
+              entity_id: !input stand
+            data:
+              option: "{{ stand_moet }}"
+
+      # 5. Wat de knop moet tonen is veranderd: knop bijwerken
+      - conditions:
+          - condition: trigger
+            id: tonen
+          - condition: template
+            value_template: "{{ toon | float(0) >= 15 and (knop_t - toon | float(0)) | abs > 0.05 }}"
+        sequence:
+          - action: climate.set_temperature
+            target:
+              entity_id: !input thermostaat
+            data:
+              temperature: "{{ toon | float }}"
+
+      # 6. Na een herstart of herladen: alles gelijkzetten
+      - conditions:
+          - condition: trigger
+            id: start
+        sequence:
+          - delay: "00:00:20"
+          - if: "{{ not is_state(thermostaat, 'heat') }}"
+            then:
+              - action: climate.set_hvac_mode
+                target:
+                  entity_id: !input thermostaat
+                data:
+                  hvac_mode: heat
+          - if: >-
+              {{ states(vakantie) in ['on', 'off'] and states(koelvraag) in ['on', 'off']
+                 and nu_stand != stand_moet }}
+            then:
+              - action: input_select.select_option
+                target:
+                  entity_id: !input stand
+                data:
+                  option: "{{ stand_moet }}"
+          - if: "{{ states(handmatig) | float(0) < 15 }}"
+            then:
+              # Eerste keer: handmatig begint op wat HA nu vraagt
+              - action: input_number.set_value
+                target:
+                  entity_id: !input handmatig
+                data:
+                  value: "{{ ([([states(gewenst) | float(19), 15] | max), 25] | min) }}"
+          - delay: "00:00:02"
+          - variables:
+              toon2: >-
+                {% set s = states(stand) %}
+                {% if s == 'Handmatig' %}{{ states(handmatig) | float(0) }}
+                {% elif s == 'Vakantie' %}{{ states(vakantietemp) | float(0) }}
+                {% else %}{{ states(gewenst) | float(0) }}{% endif %}
+          - if: "{{ toon2 | float(0) >= 15 }}"
+            then:
+              - action: climate.set_temperature
+                target:
+                  entity_id: !input thermostaat
+                data:
+                  temperature: "{{ toon2 | float }}"
