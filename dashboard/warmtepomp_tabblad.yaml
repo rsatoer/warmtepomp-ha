@@ -1,9 +1,10 @@
-# Warmtepomp - H3 als tabblad (versie 2026-11-13c)
+# Warmtepomp - H3 als tabblad (versie 2026-11-17b)
 # Voor een bestaand dashboard, bijvoorbeeld "instellingen":
 #   potlood > + (nieuw tabblad) > drie puntjes > Bewerken in YAML
 #   > alles vervangen door deze tekst > Opslaan.
 # Nodig: de drie helpers uit H3-helpers.md (compressor, starts, draaitijd)
-# en de vijf helpers uit H5-helpers.md (weekschema en vier temperaturen).
+# en de vijf helpers uit H5-helpers.md (weekschema en vier temperaturen),
+# en de thermostaat uit packages/warmtepomp_thermostaat.yaml (Thermostaat.md).
 title: Warmtepomp status
 path: warmtepomp-status
 icon: mdi:heat-pump
@@ -65,27 +66,55 @@ sections:
       - type: heading
         heading: Woonkamer
         icon: mdi:sofa
+        badges:
+          - type: entity
+            entity: input_boolean.woonkamer_instellingen_tonen
+            name: Instellingen
+            show_state: false
+            icon: mdi:tune-variant
+            tap_action:
+              action: toggle
+      - type: thermostat
+        entity: climate.woonkamer
+        name: Woonkamer
+        grid_options:
+          columns: 12
       - type: tile
-        entity: number.schuur_ketelruimte_warmtepomp_esp_gewenste_temperatuur_woonkamer
+        entity: sensor.woonkamer_ha_vraagt_nu
         name: HA vraagt nu
+        state_content:
+          - state
+          - reden
+        grid_options:
+          columns: 12
       - type: tile
-        entity: number.schuur_ketelruimte_warmtepomp_esp_gemeten_temperatuur_woonkamer
-        name: Gemeten (naar de ESP)
+        entity: input_select.woonkamer_stand
+        name: Stand
+        grid_options:
+          columns: 12
+        features_position: inline
+        features:
+          - type: select-options
       - type: tile
         entity: schedule.warmtepomp_comfort
         name: Weekschema comfort
       - type: tile
-        entity: switch.schuur_ketelruimte_warmtepomp_esp_vakantie
-        name: Vakantie
+        entity: switch.schuur_ketelruimte_warmtepomp_esp_verwarmen_toegestaan
+        name: Verwarmen toegestaan
+      # Instellingen: zichtbaar na een tik op het icoon naast de kop
       - type: tile
         entity: input_number.woonkamer_comfort
-        name: Comfort
+        name: Comfort (weekschema)
         grid_options:
           columns: 12
         features_position: inline
         features:
           - type: numeric-input
             style: buttons
+        visibility:
+          - condition: state
+            entity: input_boolean.woonkamer_instellingen_tonen
+            state: "on"
       - type: tile
         entity: input_number.woonkamer_laag
         name: Laag
@@ -95,6 +124,10 @@ sections:
         features:
           - type: numeric-input
             style: buttons
+        visibility:
+          - condition: state
+            entity: input_boolean.woonkamer_instellingen_tonen
+            state: "on"
       - type: tile
         entity: input_number.woonkamer_toeslag_thuis
         name: Toeslag als er iemand thuis is
@@ -104,6 +137,10 @@ sections:
         features:
           - type: numeric-input
             style: buttons
+        visibility:
+          - condition: state
+            entity: input_boolean.woonkamer_instellingen_tonen
+            state: "on"
       - type: tile
         entity: input_number.woonkamer_vakantie
         name: Vakantietemperatuur
@@ -113,15 +150,23 @@ sections:
         features:
           - type: numeric-input
             style: buttons
+        visibility:
+          - condition: state
+            entity: input_boolean.woonkamer_instellingen_tonen
+            state: "on"
       - type: tile
-        entity: switch.schuur_ketelruimte_warmtepomp_esp_verwarmen_toegestaan
-        name: Verwarmen toegestaan
+        entity: number.schuur_ketelruimte_warmtepomp_esp_gemeten_temperatuur_woonkamer
+        name: Gemeten (naar de controller)
+        visibility:
+          - condition: state
+            entity: input_boolean.woonkamer_instellingen_tonen
+            state: "on"
 
-  # ------------------------------------------------- Meldingen en ESP
+  # ------------------------------------------------- Meldingen en controller
   - type: grid
     cards:
       - type: heading
-        heading: Meldingen en ESP
+        heading: Meldingen en controller
         icon: mdi:bell-outline
       - type: tile
         entity: sensor.schuur_ketelruimte_warmtepomp_esp_melding
@@ -140,7 +185,7 @@ sections:
         name: Testfase meldingen
       - type: tile
         entity: sensor.schuur_ketelruimte_warmtepomp_esp_wifi_signaal
-        name: Wifi ESP
+        name: Wifi controller
       - type: button
         entity: button.schuur_ketelruimte_warmtepomp_esp_melding_bevestigen
         name: Melding bevestigen
@@ -152,7 +197,7 @@ sections:
           target:
             entity_id: button.schuur_ketelruimte_warmtepomp_esp_melding_bevestigen
       - type: button
-        name: ESP-pagina openen
+        name: Controller-pagina openen
         icon: mdi:open-in-new
         show_state: false
         tap_action:

@@ -1,6 +1,6 @@
 # Warmtepomp en Home Assistant
 
-Blueprints voor de warmtepomp (Technische Alternative UVR610 met C.M.I., aangestuurd via een ESP32 met CoE).
+Blueprints voor de warmtepomp (Technische Alternative UVR610 met C.M.I., aangestuurd via een controller: een ESP32 met CoE).
 Je kiest alles grafisch in Home Assistant: telefoon, speakers en sensoren.
 
 ## Wat erin zit
@@ -8,8 +8,10 @@ Je kiest alles grafisch in Home Assistant: telefoon, speakers en sensoren.
 | Blueprint | Soort | Wat het doet |
 | --- | --- | --- |
 | `blueprints/script/warmtepomp/melding_warmtepomp.yaml` | Script | Stuurt een melding naar je telefoon, het dashboard en (bij een storing) de speakers. Hier kies je telefoon, speakers, spraakdienst en stille uren. |
-| `blueprints/automation/warmtepomp/warmtepomp_meldingen.yaml` | Automation | Stuurt de meldingen van de warmtepomp-ESP door: storingen met advies, C.M.I. onbereikbaar, onderhoud te laat, ESP offline en opgelost. |
+| `blueprints/automation/warmtepomp/warmtepomp_meldingen.yaml` | Automation | Stuurt de meldingen van de warmtepomp-ESP door: storingen met advies, C.M.I. onbereikbaar, onderhoud te laat, de onderhoudstaken "Filter 1/2 schoonmaken", ESP offline en opgelost. |
 | `blueprints/automation/warmtepomp/warmtepomp_woonkamer.yaml` | Automation | Woonkamer (H5): weekschema, toeslag als er iemand thuis is, vakantie; de temperaturen stel je in op het dashboard. Stuurt de gewenste en gemeten temperatuur en "verwarmen toegestaan" naar de ESP. |
+| `blueprints/automation/warmtepomp/warmtepomp_thermostaat.yaml` | Automation | Thermostaat woonkamer: houdt de ronde thermostaat op het dashboard gelijk met de helper Woonkamer comfort, en het keuzemenu Stand (Automatisch, Koelen, Vakantie) met de schakelaars van de controller. |
+| `packages/warmtepomp_thermostaat.yaml` | Package | De thermostaat, het keuzemenu Stand en de sensor HA vraagt nu. Zie `dashboard/Thermostaat.md`. |
 | `dashboard/warmtepomp_dashboard.yaml` | Dashboard | Status, meldingen, temperaturen, energie en starts per dag, plus een knop naar de ESP-pagina (werkt thuis). Eerst de helpers uit `dashboard/H3-helpers.md` maken. |
 | `dashboard/warmtepomp_tabblad.yaml` | Tabblad | Hetzelfde overzicht als één tabblad, om in een bestaand dashboard te plakken (Bewerken in YAML). |
 
@@ -31,6 +33,10 @@ Nodig: ESP-versie H4 of nieuwer.
 3. **Automation maken**: open de blueprint "Warmtepomp: woonkamer", controleer de vier temperatuurhelpers, het schema, de personen, de bewegingssensor en de vijf ESP-entiteiten, en sla op als **Warmtepomp woonkamer**.
 
 De UVR doet pas iets met deze signalen na C4 (CAN-ingangen) en C7 (zijn programma). Tot die tijd zie je op de ESP en het dashboard wat Home Assistant zou vragen.
+
+## Thermostaat woonkamer installeren
+
+Zie `dashboard/Thermostaat.md`: het package plaatsen, de blueprint importeren en het dashboard vervangen.
 
 ## Bijwerken
 

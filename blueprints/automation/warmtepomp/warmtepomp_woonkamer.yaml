@@ -11,6 +11,7 @@ blueprint:
 
 
     Versie H5b 2026-11-13: temperaturen uit helpers. C8 2026-11-16: "ESP" heet nu "controller".
+    2026-11-17: stand Handmatig (vaste temperatuur van de thermostaat, zonder schema).
   domain: automation
   author: Robert
   source_url: https://github.com/rsatoer/warmtepomp-ha/blob/main/blueprints/automation/warmtepomp/warmtepomp_woonkamer.yaml
@@ -52,10 +53,26 @@ blueprint:
             entity:
               filter:
                 - domain: input_number
+        helper_handmatig:
+          name: Handmatig
+          description: Vaste temperatuur in de stand Handmatig (de draaiknop van de thermostaat).
+          default: input_number.woonkamer_handmatig
+          selector:
+            entity:
+              filter:
+                - domain: input_number
     wanneer:
       name: Schema en aanwezigheid
       icon: mdi:calendar-clock
       input:
+        stand:
+          name: Stand
+          description: "Keuzemenu uit packages/warmtepomp_thermostaat.yaml. Handmatig: vaste temperatuur, zonder schema en toeslag."
+          default: input_select.woonkamer_stand
+          selector:
+            entity:
+              filter:
+                - domain: input_select
         schema:
           name: Weekschema
           description: 'Een helper van het type Schema. Aan = comfort.'
@@ -164,6 +181,8 @@ triggers:
       - !input helper_laag
       - !input helper_toeslag
       - !input helper_vakantie
+      - !input helper_handmatig
+      - !input stand
   - trigger: state
     entity_id:
       - !input esp_vakantie
@@ -184,6 +203,8 @@ variables:
   helper_laag: !input helper_laag
   helper_toeslag: !input helper_toeslag
   helper_vakantie: !input helper_vakantie
+  helper_handmatig: !input helper_handmatig
+  stand: !input stand
   schema: !input schema
   personen: !input personen
   bewegingen: !input bewegingen
@@ -204,10 +225,11 @@ actions:
       t_laag: "{{ states(helper_laag) | float(17) }}"
       t_toeslag: "{{ states(helper_toeslag) | float(1) }}"
       t_vakantie: "{{ states(helper_vakantie) | float(16) }}"
+      handmatig: "{{ is_state(stand, 'Handmatig') and states(helper_handmatig) | is_number }}"
       meting: "{{ states(zigbee) | float(-100) }}"
       thuis: "{{ expand(personen) | selectattr('state', 'eq', 'home') | list | count > 0 }}"
       beweging: "{{ expand(bewegingen) | selectattr('state', 'eq', 'on') | list | count > 0 or expand(bewegingen) | selectattr('state', 'eq', 'off') | selectattr('last_changed', 'gt', now() - timedelta(minutes=beweging_min | int(30))) | list | count > 0 }}"
-      doel_ruw: "{{ t_vakantie if is_state(esp_vakantie, 'on') else ((t_comfort + (t_toeslag if (thuis or beweging) else 0)) if is_state(schema, 'on') else t_laag) }}"
+      doel_ruw: "{{ t_vakantie if is_state(esp_vakantie, 'on') else (states(helper_handmatig) | float(t_comfort)) if handmatig else ((t_comfort + (t_toeslag if (thuis or beweging) else 0)) if is_state(schema, 'on') else t_laag) }}"
       doel: "{{ ([([doel_ruw | float(t_laag), 15] | max), 25] | min) | round(1) }}"
       verwarmen_moet: "{{ not is_state(esp_koelvraag, 'on') }}"
 
